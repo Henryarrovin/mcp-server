@@ -6,59 +6,42 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Henryarrovin/mcp-server/config"
 	"github.com/Henryarrovin/mcp-server/mcp"
 	"github.com/Henryarrovin/mcp-server/tools"
-	"github.com/joho/godotenv"
 )
 
-func getEnv(key, fallback string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return fallback
-}
-
 func main() {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("No .env file (using system env)")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
 	}
 
-	authBaseURL := getEnv("MCP_AUTH_BASE_URL", "http://auth-service:8080")
-	paymentBaseURL := getEnv("MCP_PAYMENT_BASE_URL", "http://payment-gateway-service:8081")
-	namespace := getEnv("MCP_K8S_NAMESPACE", "auth")
-	port := getEnv("MCP_PORT", "8085")
-	ollamaURL := getEnv("OLLAMA_URL", "")
-	ollamaModel := getEnv("OLLAMA_MODEL", "llama3.2")
-
-	log.Printf("MCP server starting (pure stdlib)")
-	log.Printf("  auth     → %s", authBaseURL)
-	log.Printf("  payment  → %s", paymentBaseURL)
-	log.Printf("  k8s ns   → %s", namespace)
-	log.Printf("  port     → %s", port)
+	cfg.Print()
 
 	// Create server
 	s := mcp.NewServer("henry-microservices-mcp", "1.0.0")
 
 	// Register tools
-	tools.RegisterAuthTools(s, authBaseURL)
-	tools.RegisterPaymentTools(s, paymentBaseURL)
-	tools.RegisterKubernetesTools(s, namespace)
+	tools.RegisterAuthTools(s, cfg.Auth.BaseURL)
+	tools.RegisterPaymentTools(s, cfg.Payment.BaseURL)
+	tools.RegisterKubernetesTools(s, cfg.K8s.Namespace)
 
-	log.Printf("  tools    → %d registered", s.ToolCount())
+	log.Printf("  tools       → %d registered", s.ToolCount())
 
-	if ollamaURL != "" {
-		ollama := mcp.NewOllamaClient(ollamaURL, ollamaModel)
+	if cfg.OllamaEnabled() {
+		ollama := mcp.NewOllamaClient(cfg.Ollama.URL, cfg.Ollama.Model)
 		if err := ollama.CheckHealth(); err != nil {
-			log.Printf("  ollama   → unreachable (%v) — /chat endpoint disabled", err)
+			log.Printf("  ollama      → unreachable (%v) — /chat disabled", err)
 		} else {
 			s.SetOllama(ollama)
-			log.Printf("  ollama   → %s  model: %s", ollamaURL, ollamaModel)
+			log.Printf("  ollama   → %s  model: %s    -> ready", cfg.Ollama.URL, cfg.Ollama.Model)
 		}
 	} else {
-		log.Printf("  ollama   → not configured (set OLLAMA_URL to enable /chat)")
+		log.Printf("  ollama      → disabled (set OLLAMA_URL to enable)")
 	}
 
-	if err := s.Start(":" + port); err != nil {
+	if err := s.Start(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
