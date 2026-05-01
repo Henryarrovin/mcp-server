@@ -74,6 +74,20 @@ kubectl wait --namespace auth \
   --selector=app=kafka \
   --timeout=90s
 
+echo "Deploying Ollama..."
+kubectl apply -f ollama/pvc.yaml
+kubectl apply -f ollama/deployment.yaml
+kubectl apply -f ollama/service.yaml
+
+echo "Waiting for Ollama to be ready..."
+kubectl wait --namespace auth \
+  --for=condition=ready pod \
+  --selector=app=ollama \
+  --timeout=120s
+ 
+echo "Pulling llama3.2 model (this takes a few minutes on first run)..."
+kubectl apply -f ollama/pull-model-job.yaml
+
 echo "Creating payment_db database..."
 kubectl exec -n auth deployment/postgres -- \
   psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='payment_db'" | \
@@ -102,10 +116,23 @@ kubectl delete validatingwebhookconfiguration ingress-nginx-admission --ignore-n
 echo "Applying ingresses..."
 kubectl apply -f auth-service/ingress.yaml
 kubectl apply -f payment-service/ingress.yaml
+kubectl apply -f mcp-server/ingress.yaml
 
 echo "Deploying mock razorpay server..."
 kubectl apply -f mock-razorpay/deployment.yaml
 kubectl apply -f mock-razorpay/service.yaml
+
+echo "Deploying MCP Server..."
+kubectl apply -f mcp-server/deployment.yaml
+kubectl apply -f mcp-server/service.yaml
+kubectl apply -f mcp-server/service-account.yaml
+kubectl apply -f mcp-server/cluster-role.yaml
+ 
+echo "Waiting for MCP server to be ready..."
+kubectl wait --namespace auth \
+  --for=condition=ready pod \
+  --selector=app=mcp-server \
+  --timeout=60s
 
 echo "Done!"
 kubectl get all -n auth
