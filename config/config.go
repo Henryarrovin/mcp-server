@@ -14,6 +14,8 @@ type Config struct {
 	Payment ServiceConfig
 	K8s     K8sConfig
 	Ollama  OllamaConfig
+	Kafka   KafkaConfig
+	Logger  LoggerConfig
 }
 
 type ServerConfig struct {
@@ -31,6 +33,18 @@ type K8sConfig struct {
 type OllamaConfig struct {
 	URL   string
 	Model string
+}
+
+type KafkaConfig struct {
+	Enabled bool
+	Brokers []string
+	Topic   string
+	GroupID string
+	LogDir  string
+}
+
+type LoggerConfig struct {
+	Env string
 }
 
 func Load() (*Config, error) {
@@ -60,6 +74,16 @@ func Load() (*Config, error) {
 		Ollama: OllamaConfig{
 			URL:   getEnv("OLLAMA_URL", ""),
 			Model: getEnv("OLLAMA_MODEL", "llama3.2"),
+		},
+		Kafka: KafkaConfig{
+			Enabled: getEnv("MCP_KAFKA_ENABLED", "false") == "true",
+			Brokers: strings.Split(getEnv("MCP_KAFKA_BROKERS", "localhost:9092"), ","),
+			Topic:   getEnv("MCP_KAFKA_TOPIC", "mcp-server-logs"),
+			GroupID: getEnv("MCP_KAFKA_GROUP_ID", "mcp-log-consumer"),
+			LogDir:  getEnv("MCP_KAFKA_LOG_DIR", "/apps/logs"),
+		},
+		Logger: LoggerConfig{
+			Env: getEnv("MCP_SERVER_ENV", "development"),
 		},
 	}
 
