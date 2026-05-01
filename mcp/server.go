@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Henryarrovin/mcp-server/middleware"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // HandlerFunc is the function signature for a tool handler.
@@ -73,7 +75,7 @@ func (s *Server) ToolCount() int {
 //
 //	GET  /sse     → SSE stream, gives client its sessionId
 //	POST /message → JSON-RPC requests from client
-func (s *Server) Start(addr string) error {
+func (s *Server) Start(addr string, logger *zap.Logger) error {
 	mux := http.NewServeMux()
 
 	// MCP protocol endpoints
@@ -87,13 +89,20 @@ func (s *Server) Start(addr string) error {
 	// Health
 	mux.HandleFunc("/health", s.handleHealth)
 
+	chain := middleware.Chain(
+		middleware.Recovery(logger),
+		middleware.CORS(),
+		middleware.RateLimit(10, 20),
+		middleware.Logger(logger),
+	)
+
 	log.Printf("[mcp] server %s v%s listening on %s", s.name, s.version, addr)
 	log.Printf("[mcp] %d tools registered", len(s.tools))
 	if s.ollama != nil {
 		log.Printf("[mcp] ollama enabled — model: %s", s.ollama.model)
 	}
 
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, chain(mux))
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
