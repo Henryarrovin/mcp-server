@@ -35,6 +35,6 @@ COPY --from=builder /app/mcp-server .
 # Copy config if exists
 COPY --from=builder /app/config ./config
 
-EXPOSE 8080 50051
+EXPOSE 8085
 
 CMD ["./mcp-server"]
