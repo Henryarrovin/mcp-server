@@ -240,7 +240,7 @@ func sendSSE(sess *session, resp Response) {
 }
 
 // getString safely extracts a string from tool arguments.
-func GetString(args map[string]interface{}, key, fallback string) string {
+func GetString(args map[string]any, key, fallback string) string {
 	if v, ok := args[key]; ok {
 		if s, ok := v.(string); ok && s != "" {
 			return s
@@ -250,17 +250,17 @@ func GetString(args map[string]interface{}, key, fallback string) string {
 }
 
 // getFloat64 safely extracts a float64 from tool arguments.
-// func getFloat64(args map[string]interface{}, key string, fallback float64) float64 {
-// 	if v, ok := args[key]; ok {
-// 		switch n := v.(type) {
-// 		case float64:
-// 			return n
-// 		case int:
-// 			return float64(n)
-// 		}
-// 	}
-// 	return fallback
-// }
+func GetFloat64(args map[string]any, key string, fallback float64) float64 {
+	if v, ok := args[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case int:
+			return float64(n)
+		}
+	}
+	return fallback
+}
 
 // getInt safely extracts an int from tool arguments.
 // func getInt(args map[string]interface{}, key string, fallback int) int {
