@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -263,13 +264,9 @@ func GetFloat64(args map[string]any, key string, fallback float64) float64 {
 }
 
 // getInt safely extracts an int from tool arguments.
-// func getInt(args map[string]interface{}, key string, fallback int) int {
-// 	return int(getFloat64(args, key, float64(fallback)))
-// }
-
-// ─────────────────────────────────────────────
-//  Tool builder helpers (replaces mcp-go DSL)
-// ─────────────────────────────────────────────
+func GetInt(args map[string]any, key string, fallback int) int {
+	return int(GetFloat64(args, key, float64(fallback)))
+}
 
 // NewTool creates a tool definition.
 func NewTool(name, description string, props map[string]Property, required []string) Tool {
@@ -295,16 +292,16 @@ func Num(description string) Property {
 }
 
 // stripPrefix removes scheme+host from a URL leaving just the path+query.
-// func stripPrefix(url string) string {
-// 	// http://host/path → /path
-// 	if idx := strings.Index(url, "://"); idx >= 0 {
-// 		rest := url[idx+3:]
-// 		if idx2 := strings.Index(rest, "/"); idx2 >= 0 {
-// 			return rest[idx2:]
-// 		}
-// 	}
-// 	return url
-// }
+func StripPrefix(url string) string {
+	// http://host/path → /path
+	if idx := strings.Index(url, "://"); idx >= 0 {
+		rest := url[idx+3:]
+		if idx2 := strings.Index(rest, "/"); idx2 >= 0 {
+			return rest[idx2:]
+		}
+	}
+	return url
+}
 
 // ToolCount returns the number of registered tools.
 func (s *Server) ToolCount() int {
