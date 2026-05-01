@@ -27,12 +27,14 @@ func main() {
 	paymentBaseURL := getEnv("MCP_PAYMENT_BASE_URL", "http://payment-gateway-service:8081")
 	namespace := getEnv("MCP_K8S_NAMESPACE", "auth")
 	port := getEnv("MCP_PORT", "8085")
+	ollamaURL := getEnv("OLLAMA_URL", "")
+	ollamaModel := getEnv("OLLAMA_MODEL", "llama3.2")
 
-	log.Printf("MCP server starting")
-	log.Printf("  auth    → %s", authBaseURL)
-	log.Printf("  payment → %s", paymentBaseURL)
-	log.Printf("  k8s ns  → %s", namespace)
-	log.Printf("  port    → %s", port)
+	log.Printf("MCP server starting (pure stdlib)")
+	log.Printf("  auth     → %s", authBaseURL)
+	log.Printf("  payment  → %s", paymentBaseURL)
+	log.Printf("  k8s ns   → %s", namespace)
+	log.Printf("  port     → %s", port)
 
 	// Create server
 	s := mcp.NewServer("henry-microservices-mcp", "1.0.0")
@@ -42,11 +44,21 @@ func main() {
 	tools.RegisterPaymentTools(s, paymentBaseURL)
 	tools.RegisterKubernetesTools(s, namespace)
 
-	log.Printf("Tools registered: %d", s.ToolCount())
+	log.Printf("  tools    → %d registered", s.ToolCount())
 
-	// Start — blocking, runs until process is killed or fatal error
-	addr := ":" + port
-	if err := s.Start(addr); err != nil {
+	if ollamaURL != "" {
+		ollama := mcp.NewOllamaClient(ollamaURL, ollamaModel)
+		if err := ollama.CheckHealth(); err != nil {
+			log.Printf("  ollama   → unreachable (%v) — /chat endpoint disabled", err)
+		} else {
+			s.SetOllama(ollama)
+			log.Printf("  ollama   → %s  model: %s", ollamaURL, ollamaModel)
+		}
+	} else {
+		log.Printf("  ollama   → not configured (set OLLAMA_URL to enable /chat)")
+	}
+
+	if err := s.Start(":" + port); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
@@ -54,8 +66,9 @@ func main() {
 func init() {
 	lines := []string{
 		"╔══════════════════════════════════════════╗",
-		"║   MCP Server           					║",
+		"║   MCP Server          					║",
 		"║   JSON-RPC over HTTP + SSE           	║",
+		"║   + Ollama /chat endpoint                ║",
 		"╚══════════════════════════════════════════╝",
 	}
 	fmt.Println()
@@ -65,7 +78,7 @@ func init() {
 	fmt.Println()
 
 	if _, err := os.Stat("/usr/local/bin/kubectl"); err != nil {
-		if path := os.Getenv("PATH"); !strings.Contains(path, "kubectl") {
+		if !strings.Contains(os.Getenv("PATH"), "kubectl") {
 			fmt.Println("  Warning: kubectl not found — k8s tools will fail")
 		}
 	}
