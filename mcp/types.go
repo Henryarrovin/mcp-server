@@ -102,6 +102,52 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
+// ollama types
+type OllamaMessage struct {
+	Role      string           `json:"role"`
+	Content   string           `json:"content"`
+	ToolCalls []OllamaToolCall `json:"tool_calls,omitempty"`
+}
+
+type OllamaToolCall struct {
+	Function OllamaToolCallFn `json:"function"`
+}
+
+type OllamaToolCallFn struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments"`
+}
+
+type OllamaTool struct {
+	Type     string       `json:"type"`
+	Function OllamaToolFn `json:"function"`
+}
+
+type OllamaToolFn struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
+}
+
+type OllamaChatRequest struct {
+	Model    string          `json:"model"`
+	Messages []OllamaMessage `json:"messages"`
+	Tools    []OllamaTool    `json:"tools,omitempty"`
+	Stream   bool            `json:"stream"`
+	Options  OllamaOptions   `json:"options,omitempty"`
+}
+
+type OllamaOptions struct {
+	Temperature float64 `json:"temperature,omitempty"`
+	NumCtx      int     `json:"num_ctx,omitempty"`
+}
+
+type OllamaChatResponse struct {
+	Model   string        `json:"model"`
+	Message OllamaMessage `json:"message"`
+	Done    bool          `json:"done"`
+}
+
 func TextResult(text string) *ToolCallResult {
 	return &ToolCallResult{
 		Content: []ContentBlock{{Type: "text", Text: text}},
