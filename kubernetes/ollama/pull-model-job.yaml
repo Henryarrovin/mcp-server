@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-pull-model
+  namespace: auth
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pull-model
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Ollama to be ready..."
+              until curl -sf http://ollama-service:11434/api/tags; do
+                sleep 5
+              done
+              echo "Pulling model llama3.2..."
+              curl -X POST http://ollama-service:11434/api/pull \
+                -H "Content-Type: application/json" \
+                -d '{"name":"llama3.2"}' \
+                --no-buffer
+              echo "Model pulled successfully"
