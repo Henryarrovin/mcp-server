@@ -305,3 +305,8 @@ func Num(description string) Property {
 // 	}
 // 	return url
 // }
+
+// ToolCount returns the number of registered tools.
+func (s *Server) ToolCount() int {
+	return len(s.tools)
+}
