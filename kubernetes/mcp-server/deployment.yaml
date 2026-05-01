@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      serviceAccountName: mcp-server-sa
+      containers:
+        - name: mcp-server
+          image: henryarrovin/mcp-server:latest
+          ports:
+            - containerPort: 8085
+          env:
+            - name: MCP_AUTH_BASE_URL
+              value: "http://auth-service:8080"
+            - name: MCP_PAYMENT_BASE_URL
+              value: "http://payment-gateway-service:8081"
+            - name: MCP_K8S_NAMESPACE
+              value: "auth"
+            - name: MCP_PORT
+              value: "8085"
+            - name: OLLAMA_URL
+              value: "http://ollama-service:11434"
+            - name: OLLAMA_MODEL
+              value: "llama3.2"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8085
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8085
+            initialDelaySeconds: 10
+            periodSeconds: 15
