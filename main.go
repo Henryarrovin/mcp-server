@@ -24,16 +24,23 @@ func main() {
 	}
 
 	authBaseURL := getEnv("MCP_AUTH_BASE_URL", "http://auth-service:8080")
+	paymentBaseURL := getEnv("MCP_PAYMENT_BASE_URL", "http://payment-gateway-service:8081")
+	namespace := getEnv("MCP_K8S_NAMESPACE", "auth")
 	port := getEnv("MCP_PORT", "8085")
 
 	log.Printf("MCP server starting")
 	log.Printf("  auth    → %s", authBaseURL)
+	log.Printf("  payment → %s", paymentBaseURL)
+	log.Printf("  k8s ns  → %s", namespace)
+	log.Printf("  port    → %s", port)
 
 	// Create server
 	s := mcp.NewServer("henry-microservices-mcp", "1.0.0")
 
 	// Register tools
 	tools.RegisterAuthTools(s, authBaseURL)
+	tools.RegisterPaymentTools(s, paymentBaseURL)
+	tools.RegisterKubernetesTools(s, namespace)
 
 	log.Printf("Tools registered: %d", s.ToolCount())
 
