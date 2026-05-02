@@ -112,25 +112,24 @@ func (o *OllamaClient) Chat(
 				continue
 			}
 
-			// Accumulate content from streaming chunks
+			// Accumulate streamed text content
 			if chunk.Message.Content != "" {
 				accumulatedContent.WriteString(chunk.Message.Content)
 			}
 
-			// Take tool calls and done status from every chunk
-			// (tool calls appear in non-stream response, not in stream chunks)
+			// Capture tool calls whenever they appear
 			if len(chunk.Message.ToolCalls) > 0 {
 				finalResp = chunk
 			}
 
 			if chunk.Done {
-				// If we got tool calls earlier, keep them
+				// Only use chunk as finalResp if no tool calls captured yet
 				if len(finalResp.Message.ToolCalls) == 0 {
 					finalResp = chunk
-				}
-				// Use accumulated content if streaming split it across chunks
-				if finalResp.Message.Content == "" {
-					finalResp.Message.Content = accumulatedContent.String()
+					// Use accumulated content for streaming responses
+					if finalResp.Message.Content == "" {
+						finalResp.Message.Content = accumulatedContent.String()
+					}
 				}
 				break
 			}
