@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -19,7 +21,7 @@ func NewOllamaClient(baseURL, model string) *OllamaClient {
 	return &OllamaClient{
 		baseURL: baseURL,
 		model:   model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
@@ -51,8 +53,9 @@ func (o *OllamaClient) CheckHealth() error {
 }
 
 // Chat sends a prompt with tool definitions to Ollama.
-// When Ollama calls a tool, executor is called to run it.
-// Loops until Ollama returns a final text answer.
+// Handles both streaming and non-streaming responses automatically.
+// When Ollama decides to call a tool, executor is called to run it.
+// Loops until Ollama returns a final text answer with no more tool calls.
 func (o *OllamaClient) Chat(
 	prompt string,
 	history []OllamaMessage,
@@ -88,34 +91,66 @@ func (o *OllamaClient) Chat(
 			return "", history, fmt.Errorf("ollama chat: %w", err)
 		}
 
-		decoder := json.NewDecoder(resp.Body)
+		// Ollama may stream even with stream:false on some versions.
+		// We read line by line:
+		//   - streaming:     many lines with done=false, last line done=true
+		//   - non-streaming: single line with done=true
+		// Content is accumulated across chunks for streaming.
+		// Tool calls only appear in the done=true line.
+		var finalResp OllamaChatResponse
+		var accumulatedContent strings.Builder
 
-		var chatResp OllamaChatResponse
-
-		for {
-			var chunk OllamaChatResponse
-			if err := decoder.Decode(&chunk); err != nil {
-				if err == io.EOF {
-					break
-				}
-				resp.Body.Close()
-				return "", history, fmt.Errorf("decode response: %w", err)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
 			}
 
-			chatResp = chunk // final json has done=true
-		}
+			var chunk OllamaChatResponse
+			if err := json.Unmarshal([]byte(line), &chunk); err != nil {
+				continue
+			}
 
+			// Accumulate content from streaming chunks
+			if chunk.Message.Content != "" {
+				accumulatedContent.WriteString(chunk.Message.Content)
+			}
+
+			// Take tool calls and done status from every chunk
+			// (tool calls appear in non-stream response, not in stream chunks)
+			if len(chunk.Message.ToolCalls) > 0 {
+				finalResp = chunk
+			}
+
+			if chunk.Done {
+				// If we got tool calls earlier, keep them
+				if len(finalResp.Message.ToolCalls) == 0 {
+					finalResp = chunk
+				}
+				// Use accumulated content if streaming split it across chunks
+				if finalResp.Message.Content == "" {
+					finalResp.Message.Content = accumulatedContent.String()
+				}
+				break
+			}
+		}
 		resp.Body.Close()
 
-		messages = append(messages, chatResp.Message)
-
-		// No tool calls — final answer
-		if len(chatResp.Message.ToolCalls) == 0 {
-			return chatResp.Message.Content, messages, nil
+		if finalResp.Message.Content == "" && len(finalResp.Message.ToolCalls) == 0 {
+			return "", history, fmt.Errorf("empty response from ollama — model may not support tools, try: ollama pull llama3.2")
 		}
 
-		// Execute each tool call
-		for _, tc := range chatResp.Message.ToolCalls {
+		// Add assistant message to conversation history
+		messages = append(messages, finalResp.Message)
+
+		// No tool calls → Ollama gave final answer
+		if len(finalResp.Message.ToolCalls) == 0 {
+			return finalResp.Message.Content, messages, nil
+		}
+
+		// Ollama wants to call tools — execute each one
+		for _, tc := range finalResp.Message.ToolCalls {
 			name := tc.Function.Name
 			args := tc.Function.Arguments
 
@@ -128,7 +163,7 @@ func (o *OllamaClient) Chat(
 				result = fmt.Sprintf("tool error: %v", err)
 			}
 
-			// Add tool result back to conversation
+			// Add tool result back into conversation
 			messages = append(messages, OllamaMessage{
 				Role:    "tool",
 				Content: result,
@@ -137,7 +172,7 @@ func (o *OllamaClient) Chat(
 	}
 }
 
-// converts MCP tool definitions to Ollama's format.
+// toOllamaTools converts MCP tool definitions to Ollama's expected format.
 func toOllamaTools(tools []Tool) []OllamaTool {
 	var out []OllamaTool
 	for _, t := range tools {
@@ -148,7 +183,6 @@ func toOllamaTools(tools []Tool) []OllamaTool {
 				"description": p.Description,
 			}
 		}
-
 		params := map[string]any{
 			"type":       "object",
 			"properties": props,
@@ -156,7 +190,6 @@ func toOllamaTools(tools []Tool) []OllamaTool {
 		if len(t.InputSchema.Required) > 0 {
 			params["required"] = t.InputSchema.Required
 		}
-
 		out = append(out, OllamaTool{
 			Type: "function",
 			Function: OllamaToolFn{

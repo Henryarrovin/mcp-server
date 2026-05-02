@@ -143,9 +143,10 @@ type OllamaOptions struct {
 }
 
 type OllamaChatResponse struct {
-	Model   string        `json:"model"`
-	Message OllamaMessage `json:"message"`
-	Done    bool          `json:"done"`
+	Model      string        `json:"model"`
+	Message    OllamaMessage `json:"message"`
+	Done       bool          `json:"done"`
+	DoneReason string        `json:"done_reason"`
 }
 
 func TextResult(text string) *ToolCallResult {
