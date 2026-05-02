@@ -69,6 +69,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 type Middleware func(http.Handler) http.Handler
 
 func Chain(middlewares ...Middleware) Middleware {
