@@ -4,4 +4,7 @@ run:
 build:
 	go build -o bin/mcp-server .
 
-.PHONY: run build
+cli:
+	cd cli && go run .
+
+.PHONY: run build cli
