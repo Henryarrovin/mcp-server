@@ -87,14 +87,25 @@ func (o *OllamaClient) Chat(
 		if err != nil {
 			return "", history, fmt.Errorf("ollama chat: %w", err)
 		}
-		defer resp.Body.Close()
 
-		data, _ := io.ReadAll(resp.Body)
+		decoder := json.NewDecoder(resp.Body)
 
 		var chatResp OllamaChatResponse
-		if err := json.Unmarshal(data, &chatResp); err != nil {
-			return "", history, fmt.Errorf("parse response: %w", err)
+
+		for {
+			var chunk OllamaChatResponse
+			if err := decoder.Decode(&chunk); err != nil {
+				if err == io.EOF {
+					break
+				}
+				resp.Body.Close()
+				return "", history, fmt.Errorf("decode response: %w", err)
+			}
+
+			chatResp = chunk // final json has done=true
 		}
+
+		resp.Body.Close()
 
 		messages = append(messages, chatResp.Message)
 
