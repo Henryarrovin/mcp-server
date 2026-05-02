@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -35,25 +36,36 @@ func NewChatClient(baseURL string) *ChatClient {
 }
 
 func (c *ChatClient) Ping() error {
-	// Use a short timeout just for ping
-	pingClient := &http.Client{Timeout: 10 * time.Second}
-	req := chatRequest{SessionID: "ping", Message: "ping"}
-	body, _ := json.Marshal(req)
+	// check if the MCP server /health endpoint is reachable
+	healthURL := strings.Replace(c.baseURL, "/chat", "/health", 1)
 
-	resp, err := pingClient.Post(c.baseURL, "application/json", bytes.NewBuffer(body))
+	pingClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := pingClient.Get(healthURL)
 	if err != nil {
 		return fmt.Errorf("chat endpoint unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, _ := io.ReadAll(resp.Body)
-	var chatResp chatResponse
-	if err := json.Unmarshal(data, &chatResp); err != nil {
-		return fmt.Errorf("parse ping response: %w", err)
+
+	var result struct {
+		Status string `json:"status"`
+		Ollama string `json:"ollama"`
 	}
-	if chatResp.Error == "ollama not configured — set OLLAMA_URL env var" {
-		return fmt.Errorf("ollama not configured in mcp-server — set OLLAMA_URL")
+	if err := json.Unmarshal(data, &result); err != nil {
+		return fmt.Errorf("parse health response: %w", err)
 	}
+
+	if result.Status != "ok" {
+		return fmt.Errorf("server unhealthy")
+	}
+	if result.Ollama == "unreachable" {
+		return fmt.Errorf("ollama unreachable — make sure ollama is running and OLLAMA_URL is set")
+	}
+	if result.Ollama == "disabled" {
+		return fmt.Errorf("ollama not configured — set OLLAMA_URL in mcp-server .env")
+	}
+
 	return nil
 }
 
