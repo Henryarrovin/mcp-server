@@ -42,12 +42,14 @@ type MCPClient struct {
 	sessionID  string
 	client     *http.Client
 	msgID      int
+	responseCh chan MCPResponse
 }
 
 func NewMCPClient(sseURL string) (*MCPClient, error) {
 	c := &MCPClient{
-		sseURL: sseURL,
-		client: &http.Client{Timeout: 30 * time.Second},
+		sseURL:     sseURL,
+		client:     &http.Client{Timeout: 30 * time.Second},
+		responseCh: make(chan MCPResponse, 32),
 	}
 	if err := c.connect(); err != nil {
 		return nil, fmt.Errorf("SSE connect: %w", err)
@@ -58,13 +60,15 @@ func NewMCPClient(sseURL string) (*MCPClient, error) {
 	return c, nil
 }
 
+// connect opens SSE, extracts sessionId, starts goroutine to read responses.
 func (c *MCPClient) connect() error {
-	sseClient := &http.Client{}
+	sseClient := &http.Client{} // no timeout — SSE is long-lived
 	resp, err := sseClient.Get(c.sseURL)
 	if err != nil {
 		return fmt.Errorf("GET SSE failed: %w", err)
 	}
 
+	// Read SSE until we get the endpoint event with sessionId
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -76,24 +80,38 @@ func (c *MCPClient) connect() error {
 					c.sessionID = strings.TrimSpace(parts[1])
 					base := extractBase(c.sseURL)
 					c.messageURL = base + data
-					resp.Body.Close()
+					// Start goroutine to continuously read SSE responses
+					go c.readSSE(resp.Body, scanner)
 					return nil
 				}
 			}
 		}
 	}
+
 	resp.Body.Close()
 	return fmt.Errorf("could not get sessionId from SSE")
 }
 
-func extractBase(url string) string {
-	parts := strings.Split(url, "/sse")
-	if len(parts) > 0 {
-		return parts[0]
+// readSSE continuously reads SSE events and sends them to responseCh.
+func (c *MCPClient) readSSE(body io.ReadCloser, scanner *bufio.Scanner) {
+	defer body.Close()
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			if data == "" || data == ": ping" {
+				continue
+			}
+			var resp MCPResponse
+			if err := json.Unmarshal([]byte(data), &resp); err != nil {
+				continue
+			}
+			c.responseCh <- resp
+		}
 	}
-	return url
 }
 
+// sendMessage POSTs a JSON-RPC request and waits for response via SSE channel.
 func (c *MCPClient) sendMessage(method string, params any) (*MCPResponse, error) {
 	c.msgID++
 	payload := MCPRequest{
@@ -104,21 +122,23 @@ func (c *MCPClient) sendMessage(method string, params any) (*MCPResponse, error)
 	}
 	body, _ := json.Marshal(payload)
 
+	// POST the request — server returns 202, actual response comes via SSE
 	resp, err := c.client.Post(c.messageURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("POST failed: %w", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 
-	data, _ := io.ReadAll(resp.Body)
-	var mcpResp MCPResponse
-	if err := json.Unmarshal(data, &mcpResp); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	// Wait for response on SSE channel
+	select {
+	case mcpResp := <-c.responseCh:
+		if mcpResp.Error != nil {
+			return nil, fmt.Errorf("MCP error %d: %s", mcpResp.Error.Code, mcpResp.Error.Message)
+		}
+		return &mcpResp, nil
+	case <-time.After(30 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for response")
 	}
-	if mcpResp.Error != nil {
-		return nil, fmt.Errorf("MCP error %d: %s", mcpResp.Error.Code, mcpResp.Error.Message)
-	}
-	return &mcpResp, nil
 }
 
 func (c *MCPClient) initialize() error {
@@ -155,4 +175,12 @@ func (c *MCPClient) ListTools() ([]MCPTool, error) {
 		tools = append(tools, tool)
 	}
 	return tools, nil
+}
+
+func extractBase(url string) string {
+	parts := strings.Split(url, "/sse")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return url
 }
