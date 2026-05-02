@@ -30,16 +30,17 @@ type chatResponse struct {
 func NewChatClient(baseURL string) *ChatClient {
 	return &ChatClient{
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 300 * time.Second},
+		client:  &http.Client{Timeout: 0},
 	}
 }
 
-// Ping checks if the /chat endpoint is available and Ollama is configured.
 func (c *ChatClient) Ping() error {
+	// Use a short timeout just for ping
+	pingClient := &http.Client{Timeout: 10 * time.Second}
 	req := chatRequest{SessionID: "ping", Message: "ping"}
 	body, _ := json.Marshal(req)
 
-	resp, err := c.client.Post(c.baseURL, "application/json", bytes.NewBuffer(body))
+	resp, err := pingClient.Post(c.baseURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return fmt.Errorf("chat endpoint unreachable: %w", err)
 	}
@@ -49,10 +50,6 @@ func (c *ChatClient) Ping() error {
 	var chatResp chatResponse
 	if err := json.Unmarshal(data, &chatResp); err != nil {
 		return fmt.Errorf("parse ping response: %w", err)
-	}
-	if chatResp.Error != "" && chatResp.Error != "ollama not configured" {
-		// Any error other than "not configured" means server is up
-		return nil
 	}
 	if chatResp.Error == "ollama not configured — set OLLAMA_URL env var" {
 		return fmt.Errorf("ollama not configured in mcp-server — set OLLAMA_URL")
@@ -73,7 +70,14 @@ func (c *ChatClient) Send(
 	}
 	body, _ := json.Marshal(req)
 
+	// Show spinner while waiting — Ollama can be slow on CPU
+	done := make(chan struct{})
+	go spinner(done)
+
 	resp, err := c.client.Post(c.baseURL, "application/json", bytes.NewBuffer(body))
+	close(done)             // stop spinner
+	fmt.Print("\r  \033[K") // clear spinner line
+
 	if err != nil {
 		return "", fmt.Errorf("chat request failed: %w", err)
 	}
@@ -111,4 +115,20 @@ func (c *ChatClient) ClearSession(sessionID string) {
 		return
 	}
 	resp.Body.Close()
+}
+
+// spinner shows a rotating indicator while waiting for Ollama
+func spinner(done chan struct{}) {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	i := 0
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			fmt.Printf("\r  \033[33m%s\033[0m thinking...", frames[i%len(frames)])
+			i++
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }
