@@ -30,7 +30,7 @@ type chatResponse struct {
 func NewChatClient(baseURL string) *ChatClient {
 	return &ChatClient{
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
