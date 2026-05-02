@@ -87,7 +87,7 @@ func main() {
 			fmt.Println("\n  Goodbye!")
 			return
 		case "help":
-			printHelp(tools)
+			printHelp()
 			continue
 		case "tools":
 			printTools(tools)
@@ -126,16 +126,16 @@ func clearScreen() {
 
 func printBanner(mcpURL string) {
 	fmt.Println()
-	fmt.Println("  \033[1m╔══════════════════════════════════════════════════════════╗\033[0m")
-	fmt.Println("  \033[1m║\033[0m    \033[1;36mmcp\033[0m — Ollama + MCP Interactive Client                \033[1m║\033[0m")
-	fmt.Println("  \033[1m║\033[0m    auth-service · payment-gateway · kubernetes           \033[1m║\033[0m")
-	fmt.Println("  \033[1m╚══════════════════════════════════════════════════════════╝\033[0m")
+	fmt.Println("  \033[1m╔════════════════════════════════════════════╗")
+	fmt.Println("  \033[1m║mcp — Ollama + MCP Interactive Client       ║")
+	fmt.Println("  \033[1m║auth-service · payment-gateway · kubernetes ║")
+	fmt.Println("  \033[1m╚════════════════════════════════════════════╝")
 	fmt.Println()
 	fmt.Printf("  MCP  →  %s\n", mcpURL)
 	fmt.Println()
 }
 
-func printHelp(tools []MCPTool) {
+func printHelp() {
 	fmt.Println()
 	fmt.Println("  \033[1mBuilt-in commands:\033[0m")
 	fmt.Println("    help      show this help")
