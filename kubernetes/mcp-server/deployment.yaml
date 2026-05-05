@@ -28,10 +28,25 @@ spec:
               value: "auth"
             - name: MCP_PORT
               value: "8085"
+            - name: MCP_SERVER_ENV
+              value: "production"
             - name: OLLAMA_URL
               value: "http://ollama-service:11434"
             - name: OLLAMA_MODEL
               value: "llama3.2"
+            - name: MCP_KAFKA_ENABLED
+              value: "true"
+            - name: MCP_KAFKA_BROKERS
+              value: "kafka-service:9092"
+            - name: MCP_KAFKA_TOPIC
+              value: "mcp-server-logs"
+            - name: MCP_KAFKA_GROUP_ID
+              value: "mcp-log-consumer"
+            - name: MCP_KAFKA_LOG_DIR
+              value: "/apps/logs"
+          volumeMounts:
+            - name: logs
+              mountPath: /apps/logs
           readinessProbe:
             httpGet:
               path: /health
@@ -44,3 +59,7 @@ spec:
               port: 8085
             initialDelaySeconds: 10
             periodSeconds: 15
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: logs-pvc
