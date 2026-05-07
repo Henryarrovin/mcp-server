@@ -7,4 +7,7 @@ build:
 cli:
 	cd cli && go run .
 
-.PHONY: run build cli
+cli-build:
+	cd cli && go build -o ../bin/mcp-cli .
+
+.PHONY: run build cli cli-build
