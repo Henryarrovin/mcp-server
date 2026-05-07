@@ -139,3 +139,31 @@ kubectl get all -n auth
 
 echo "▶ Starting port forward for ingress-nginx-controller..."
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 80:80 --address 0.0.0.0 &
+
+echo "Building MCP CLI..."
+
+kubectl exec -n auth deployment/mcp-server -- sh -c "
+cd /app &&
+make cli-build
+"
+
+echo "Making 'mcp' command globally runnable..."
+
+kubectl exec -n auth deployment/mcp-server -- sh -c "
+chmod +x /app/bin/mcp-cli &&
+ln -sf /app/bin/mcp-cli /usr/local/bin/mcp
+"
+
+echo "Testing MCP CLI..."
+kubectl exec -n auth deployment/mcp-server -- mcp --help || true
+
+echo "Creating MCP CLI env file..."
+
+kubectl exec -n auth deployment/mcp-server -- sh -c '
+cat > /root/.mcp.env << EOF
+OLLAMA_URL=http://ollama-service:11434
+OLLAMA_MODEL=qwen2.5:1.5b
+MCP_SSE_URL=http://mcp-server-service:8085/sse
+MCP_CHAT_URL=http://mcp-server-service:8085/chat
+EOF
+'
